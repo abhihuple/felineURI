@@ -1,0 +1,3 @@
+Label: cat
+Max Temperature: 31.98
+Total predictions:2

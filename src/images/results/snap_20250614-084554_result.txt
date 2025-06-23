@@ -1,0 +1,3 @@
+Label: human
+Max Temperature: 38.91
+Total predictions:1

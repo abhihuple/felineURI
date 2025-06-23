@@ -1,0 +1,3 @@
+Label: dog
+Max Temperature: 30.98
+Total predictions:1
