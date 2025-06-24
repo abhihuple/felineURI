@@ -42,6 +42,8 @@ class ImageProcessor:
         # Final results directory for reports
         self.final_results_dir = "final_results"
 
+        self.report_lock = asyncio.Lock()
+
         self._create_dirs()
         self._init_report()
 
@@ -70,15 +72,15 @@ class ImageProcessor:
                 writer = csv.writer(csvfile)
                 writer.writerow(["Date", "Time", "Image", "Temperature Value"])
 
-    def _add_to_report(self, image_filename, temperature):
-        """Add a new entry to the report"""
+    async def _add_to_report(self, image_filename, temperature):
         now = datetime.now()
         date_str = now.strftime("%Y-%m-%d")
         time_str = now.strftime("%H:%M:%S")
-
-        with open(self.report_path, 'a', newline='') as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow([date_str, time_str, image_filename, temperature])
+        
+        async with self.report_lock:  # Acquire the lock before writing
+            with open(self.report_path, 'a', newline='') as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow([date_str, time_str, image_filename, temperature])
         logging.info(f"Added to report: {image_filename} with temp {temperature}")
 
     async def process_single_image(self, image_path: str):
@@ -279,7 +281,7 @@ class ImageProcessor:
 
             else:  # default view
                 df['Label'] = df['DateTime'].dt.strftime('%Y-%m-%d %H:%M')
-                title = 'Fever Trend (Temperatures > 37.5°C)'
+                title = ''
                 x_title = 'Date and Time'
 
             # Create the plot
@@ -297,7 +299,7 @@ class ImageProcessor:
                 xaxis_title=x_title,
                 yaxis_title='Temperature (°C)',
                 hovermode='x unified',
-                template='plotly_white',
+                template='plotly_dark',
                 xaxis=dict(tickangle=45)
             )
 
@@ -331,7 +333,55 @@ class WebServer:
         <head>
             <title>{title} | Thermal Monitoring</title>
             <style>
+                :root {{
+                    --bg-color: #ffffff;
+                    --text-color: #333333;
+                    --sidebar-bg: #f0f0f0;
+                    --sidebar-text: #333333;
+                    --header-bg: #ffffff;
+                    --tile-bg: #ffffff;
+                    --tile-border: #ddd;
+                    --table-header-bg: #f2f2f2;
+                    --stat-card-bg: #f9f9f9;
+                }}
+                
+                [data-theme="dark"] {{
+                    --bg-color: #121212;
+                    --text-color: #f0f0f0;
+                    --sidebar-bg: #1e1e1e;
+                    --sidebar-text: #f0f0f0;
+                    --header-bg: #1a1a1a;
+                    --tile-bg: #1e1e1e;
+                    --tile-border: #333;
+                    --table-header-bg: #2a2a2a;
+                    --stat-card-bg: #2a2a2a;
+                }}
+
+                    .tile-green {{
+        border: 5px solid #4CAF50 !important;
+        box-shadow: 0 0 10px gba(144, 238, 144, 1);
+        animation: glow 1.5s infinite alternate;
+    }}
+    .tile-yellow {{
+        border: 5px solid #FFEB3B !important;
+        box-shadow: 0 0 10px rgba(255, 235, 59, 0.6);
+        animation: glow 1.5s infinite alternate;
+    }}
+    .tile-orange {{
+        border: 5px solid #FF9800 !important;
+        box-shadow: 0 0 10px rgba(255, 152, 0, 0.6);
+        animation: glow 1.5s infinite alternate;
+    }}
+    .tile-red {{
+        border: 5px solid #F44336 !important;
+        box-shadow: 0 0 10px rgba(244, 67, 54, 0.6);
+        animation: glow 1.5s infinite alternate;
+    }}
+
+                
                 body {{ 
+                    background-color: var(--bg-color);
+                    color: var(--text-color);
                     font-family: Arial, sans-serif; 
                     margin: 0; 
                     display: flex;
@@ -339,13 +389,14 @@ class WebServer:
                 }}
                 .sidebar {{
                     width: 200px;
-                    background-color: #f0f0f0;
+                    background-color: var(--sidebar-bg);
                     padding: 20px;
                     box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+                    position: relative;
                 }}
                 .sidebar h2 {{
                     margin-top: 0;
-                    color: #333;
+                    color: var(--sidebar-text);
                 }}
                 .sidebar ul {{
                     list-style: none;
@@ -353,11 +404,11 @@ class WebServer:
                 }}
                 .sidebar li {{
                     padding: 10px 0;
-                    border-bottom: 1px solid #ddd;
+                    border-bottom: 1px solid var(--tile-border);
                 }}
                 .sidebar li a {{
                     text-decoration: none;
-                    color: #333;
+                    color: var(--sidebar-text);
                     display: block;
                 }}
                 .sidebar li a:hover {{
@@ -372,10 +423,11 @@ class WebServer:
                     justify-content: space-between;
                     align-items: center;
                     margin-bottom: 20px;
+                    background-color: var(--header-bg);
                 }}
                 .header h1 {{
                     margin: 0;
-                    color: #333;
+                    color: var(--text-color);
                 }}
                 .tile-grid {{
                     display: grid;
@@ -383,11 +435,17 @@ class WebServer:
                     gap: 20px;
                 }}
                 .tile {{
-                    border: 1px solid #ddd;
-                    border-radius: 4px;
+                    border: 1px solid var(--tile-border);
+                    border-radius: 6.9%;
                     overflow: hidden;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                    background-color: var(--tile-bg);
+                    transition: box-shadow 0.3s ease-in-out;
                 }}
+                .tile:hover {{
+                    transform: scale(1.02);
+                    box-shadow: 0 0 20px rgba(255, 255, 255, 0.7);
+                    }}
                 .tile img {{
                     width: 100%;
                     height: 150px;
@@ -462,9 +520,9 @@ class WebServer:
                     flex-wrap: wrap;
                 }}
                 .stat-card {{
-                    background: #f9f9f9;
+                    background-color: var(--stat-card-bg);
                     border: 1px solid #ddd;
-                    border-radius: 4px;
+                    border-radius: 5%;
                     padding: 15px;
                     min-width: 200px;
                 }}
@@ -473,28 +531,69 @@ class WebServer:
                     font-weight: bold;
                     color: #4CAF50;
                 }}
+                .theme-toggle {{
+                    position: absolute;
+                    cursor: pointer;
+                    font-size: 24px;
+                }}
+
+                 @keyframes glow {{
+        from {{
+            box-shadow: 0 0 5px rgba(255, 255, 255, 0.3);
+        }}
+        to {{
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.6);
+        }}
+    }}
             </style>
         </head>
         <body>
             <div class="sidebar">
                 <h2>Navigation</h2>
                 <ul>
-                    <li><a href="/">Home</a></li>
+                    <li><a href="/">Overview</a></li>
                     <li><a href="/thermal-images">Thermal Images</a></li>
                     <li><a href="/thermal-data">Thermal Data</a></li>
                     <li><a href="/report">Download Report</a></li>
+                    <div class="theme-toggle" id="themeToggle">🌙</div>
                 </ul>
+                
             </div>
 
             <div class="main-content">
                 {content}
             </div>
+            <script>
+                const themeToggle = document.getElementById('themeToggle');
+                const body = document.body;
+                
+                const savedTheme = localStorage.getItem('theme');
+                if (savedTheme) {{
+                    body.setAttribute('data-theme', savedTheme);
+                    if (savedTheme === 'dark') {{
+                        themeToggle.textContent = '☀️';
+                    }}
+                }}
+                
+                themeToggle.addEventListener('click', () => {{
+                    if (body.getAttribute('data-theme') === 'dark') {{
+                        body.setAttribute('data-theme', 'light');
+                        themeToggle.textContent = '🌙';
+                        localStorage.setItem('theme', 'light');
+                    }} else {{
+                        body.setAttribute('data-theme', 'dark');
+                        themeToggle.textContent = '☀️';
+                        localStorage.setItem('theme', 'dark');
+                    }}
+                }});
+            </script>
         </body>
         </html>
         """
 
     async def handle_home(self, request):
         """Handle home page with tiled images and trend graph"""
+        
         # Get filter from query parameter
         filter_type = request.query.get('filter', 'default')
 
@@ -505,22 +604,41 @@ class WebServer:
         report_path = self.processor.report_path
         report_data = []
         if os.path.exists(report_path):
-            with open(report_path, 'r') as csvfile:
-                reader = csv.DictReader(csvfile)
-                for row in reader:
-                    try:
-                        # Only include temperatures >37.5°C
-                        if float(row['Temperature Value']) > 37.5:
-                            report_data.append(row)
-                    except (ValueError, TypeError):
-                        continue
+            async with self.processor.report_lock:
+                with open(report_path, 'r') as csvfile:
+                    reader = csv.DictReader(csvfile)
+                    for row in reader:
+                        try:
+                            # Only include temperatures >37.5°C
+                            if float(row['Temperature Value']) > 37.5:
+                                report_data.append(row)
+                        except (ValueError, TypeError):
+                            continue
 
+        # Create tile grid for images
         # Create tile grid for images
         tiles = []
         for row in report_data:
             img_path = f"/results/{row['Image']}"
+            try:
+                temp_value = float(row['Temperature Value'])
+            except (ValueError, TypeError):
+                temp_value = 0  # Default for invalid values
+            
+            # Determine border class based on temperature
+            if temp_value >= 40:
+                border_class = "tile-red"
+            elif 39.5 <= temp_value < 40:
+                border_class = "tile-orange"
+            elif 39 <= temp_value < 39.5:
+                border_class = "tile-yellow"
+            elif 38 <= temp_value < 39:
+                border_class = "tile-green"
+            else:
+                border_class = ""
+
             tiles.append(f"""
-            <div class="tile">
+            <div class="tile {border_class}">
                 <img src="{img_path}" alt="Thermal Image">
                 <div class="tile-content">
                     <h3>{row['Image']}</h3>
@@ -530,9 +648,7 @@ class WebServer:
                 </div>
             </div>
             """)
-
         tile_grid = f'<div class="tile-grid">{"".join(tiles)}</div>' if tiles else '<p>No thermal images available</p>'
-
         # Create filter links with active state
         filters = [
             {'type': 'default', 'label': 'Default View'},
